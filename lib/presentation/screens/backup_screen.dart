@@ -2,6 +2,7 @@ import 'dart:io';
 
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:file_selector/file_selector.dart';
 import 'package:path_provider/path_provider.dart';
 
 import '../../providers.dart';
@@ -14,21 +15,13 @@ class BackupScreen extends ConsumerStatefulWidget {
 }
 
 class _BackupScreenState extends ConsumerState<BackupScreen> {
-  final _fileNameController = TextEditingController(text: 'mybaby_backup.xlsx');
-  final _importPathController = TextEditingController();
   Directory? _downloadsDir;
+  String? _pickedImportPath;
 
   @override
   void initState() {
     super.initState();
     _loadDownloadsDir();
-  }
-
-  @override
-  void dispose() {
-    _fileNameController.dispose();
-    _importPathController.dispose();
-    super.dispose();
   }
 
   Future<void> _loadDownloadsDir() async {
@@ -61,14 +54,6 @@ class _BackupScreenState extends ConsumerState<BackupScreen> {
                 title: 'Export to Excel',
                 children: [
                   Text('Default folder: $downloadsPath'),
-                  const SizedBox(height: 8),
-                  TextField(
-                    controller: _fileNameController,
-                    decoration: const InputDecoration(
-                      labelText: 'File name (will be saved as .xlsx)',
-                      prefixIcon: Icon(Icons.description_outlined),
-                    ),
-                  ),
                   const SizedBox(height: 12),
                   SizedBox(
                     width: double.infinity,
@@ -78,12 +63,12 @@ class _BackupScreenState extends ConsumerState<BackupScreen> {
                               height: 16,
                               width: 16,
                               child: CircularProgressIndicator(strokeWidth: 2),
-                            )
+                          )
                           : const Icon(Icons.file_download_done_outlined),
                       label: Text(state.exporting ? 'Exporting...' : 'Export all data'),
                       onPressed: state.exporting
                           ? null
-                          : () => controller.exportAll(_fileNameController.text.trim()),
+                          : () => controller.exportAll(null),
                     ),
                   ),
                   if (state.lastExportPath != null) ...[
@@ -97,28 +82,43 @@ class _BackupScreenState extends ConsumerState<BackupScreen> {
                 context,
                 title: 'Import from Excel',
                 children: [
-                  TextField(
-                    controller: _importPathController,
-                    decoration: const InputDecoration(
-                      labelText: 'Path to .xlsx file (e.g. /storage/emulated/0/Download/mybaby_backup.xlsx)',
-                      prefixIcon: Icon(Icons.folder_open),
-                    ),
+                  Row(
+                    children: [
+                      const Icon(Icons.insert_drive_file_outlined),
+                      const SizedBox(width: 8),
+                      Expanded(
+                        child: Text(
+                          _pickedImportPath ?? 'No file selected',
+                          maxLines: 2,
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                      ),
+                      TextButton(
+                        onPressed: state.importing ? null : _pickImportFile,
+                        child: const Text('Choose file'),
+                      ),
+                    ],
                   ),
-                  const SizedBox(height: 8),
+                  const SizedBox(height: 12),
                   SizedBox(
                     width: double.infinity,
                     child: ElevatedButton.icon(
-                      icon: state.importing
-                          ? const SizedBox(
-                              height: 16,
-                              width: 16,
-                              child: CircularProgressIndicator(strokeWidth: 2),
-                            )
-                          : const Icon(Icons.file_upload_outlined),
-                      label: Text(state.importing ? 'Importing...' : 'Import data'),
-                      onPressed: state.importing ? null : () => controller.importAll(_importPathController.text),
-                    ),
+                    icon: state.importing
+                        ? const SizedBox(
+                            height: 16,
+                            width: 16,
+                            child: CircularProgressIndicator(strokeWidth: 2),
+                        )
+                        : const Icon(Icons.file_upload_outlined),
+                    label: Text(state.importing ? 'Importing...' : 'Import data'),
+                    onPressed: state.importing || _pickedImportPath == null
+                        ? null
+                        : () async {
+                            await controller.importAll(_pickedImportPath ?? '');
+                            await _refreshLoadedData();
+                          },
                   ),
+                ),
                   const SizedBox(height: 8),
                   Text(
                     'Tip: exported files are saved to your downloads folder by default.',
@@ -178,5 +178,29 @@ class _BackupScreenState extends ConsumerState<BackupScreen> {
         ],
       ),
     );
+  }
+
+  Future<void> _pickImportFile() async {
+    final typeGroup = XTypeGroup(
+      label: 'Excel',
+      extensions: const ['xlsx'],
+    );
+    final file = await openFile(acceptedTypeGroups: [typeGroup]);
+    if (file == null) return;
+    setState(() {
+      _pickedImportPath = file.path;
+    });
+  }
+
+  Future<void> _refreshLoadedData() async {
+    try {
+      await ref.read(todaySummaryControllerProvider.notifier).load();
+    } catch (_) {}
+    try {
+      await ref.read(waterControllerProvider.notifier).load();
+    } catch (_) {}
+    try {
+      await ref.read(policyControllerProvider.notifier).load();
+    } catch (_) {}
   }
 }
