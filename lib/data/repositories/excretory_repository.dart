@@ -164,4 +164,59 @@ class ExcretoryRepository {
     });
     return fetchToday();
   }
+
+  Future<DailyExcretory> removeLog(DateTime time, String type) async {
+    final key = todayKey();
+    final db = await _db.database;
+    final nowIso = DateTime.now().toIso8601String();
+    await db.transaction((txn) async {
+      final deleted = await txn.delete(
+        'excretory_log',
+        where: 'date = ? AND time = ? AND type = ?',
+        whereArgs: [key, time.toIso8601String(), type],
+      );
+      if (deleted == 0) return;
+
+      if (type == 'pee') {
+        final latest = await txn.query(
+          'excretory_log',
+          columns: ['time'],
+          where: 'date = ? AND type = ?',
+          whereArgs: [key, 'pee'],
+          orderBy: 'time DESC',
+          limit: 1,
+        );
+        final latestTime = latest.isNotEmpty ? latest.first['time'] as String? : null;
+        await txn.rawUpdate(
+          'UPDATE daily_excretory SET pee_count = CASE WHEN pee_count > 0 THEN pee_count - 1 ELSE 0 END, last_pee_time = ?, updated_at = ? WHERE date = ?',
+          [latestTime, nowIso, key],
+        );
+        await _ensureSummary(txn, key);
+        await txn.rawUpdate(
+          'UPDATE daily_feast_summary SET total_pee = CASE WHEN total_pee > 0 THEN total_pee - 1 ELSE 0 END, updated_at = ? WHERE date = ?',
+          [nowIso, key],
+        );
+      } else if (type == 'poop') {
+        final latest = await txn.query(
+          'excretory_log',
+          columns: ['time'],
+          where: 'date = ? AND type = ?',
+          whereArgs: [key, 'poop'],
+          orderBy: 'time DESC',
+          limit: 1,
+        );
+        final latestTime = latest.isNotEmpty ? latest.first['time'] as String? : null;
+        await txn.rawUpdate(
+          'UPDATE daily_excretory SET poop_count = CASE WHEN poop_count > 0 THEN poop_count - 1 ELSE 0 END, last_poop_time = ?, updated_at = ? WHERE date = ?',
+          [latestTime, nowIso, key],
+        );
+        await _ensureSummary(txn, key);
+        await txn.rawUpdate(
+          'UPDATE daily_feast_summary SET total_pooh = CASE WHEN total_pooh > 0 THEN total_pooh - 1 ELSE 0 END, updated_at = ? WHERE date = ?',
+          [nowIso, key],
+        );
+      }
+    });
+    return fetchToday();
+  }
 }

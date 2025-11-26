@@ -183,6 +183,22 @@ class TodaySummaryController extends StateNotifier<TodaySummaryState> {
     return _excretoryRepository.fetchLogsToday(type);
   }
 
+  Future<void> removeExcretoryEntry(DateTime time, String type) async {
+    final updated = await _excretoryRepository.removeLog(time, type);
+    final summary = await _feastRepository.fetchSummaryToday();
+    state = state.copyWith(excretory: updated, summary: summary);
+    await _refreshRecentSummaries();
+  }
+
+  Future<void> removeMilkSession(DailyFeast session) async {
+    if (session.id == null) return;
+    final summary = await _feastRepository.removeSession(session.id!, session.durationSec);
+    final sessions = await _feastRepository.sessionsToday();
+    state = state.copyWith(summary: summary, sessions: sessions);
+    await _refreshRecentSummaries();
+    _restartCountdownTimer();
+  }
+
   Future<void> startFeeding() async {
     if (state.activeFeeding) return;
     _ticker?.cancel();
