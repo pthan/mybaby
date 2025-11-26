@@ -400,6 +400,11 @@ class TodaySummaryController extends StateNotifier<TodaySummaryState> {
     _restartCountdownTimer();
     await _refreshRecentSummaries();
     if (nextFromSummary != null && remindersEnabled) {
+      // Cancel any pending alarm and reschedule using the new policy window.
+      try {
+        await _reminderService.cancelMilkReminder();
+      } catch (_) {}
+      await _reminderRepository.setNextTrigger('feast_milk', nextFromSummary);
       await _scheduleMilkReminder(nextFromSummary);
     } else {
       try {

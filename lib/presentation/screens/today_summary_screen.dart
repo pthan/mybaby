@@ -358,36 +358,39 @@ class _OverviewCard extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final waterState = ref.watch(waterControllerProvider);
     final totalFeastSeconds = (state.summary?.totalFeastTimeSec ?? 0) + (state.activeFeeding ? state.elapsed.inSeconds : 0);
-    return _SectionCard(
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          _sectionHeader(context, 'Today Overview'),
-          const SizedBox(height: 12),
-          Wrap(
-            spacing: 7,
-            runSpacing: 7,
-            children: [
-              GestureDetector(
-                onTap: () => _showExcretoryLog(context, ref.read(todaySummaryControllerProvider.notifier), 'pee'),
-                child: _overviewStat(context, 'Total pee', (state.excretory?.peeCount ?? 0).toString(), Icons.waves),
-              ),
-              GestureDetector(
-                onTap: () => _showExcretoryLog(context, ref.read(todaySummaryControllerProvider.notifier), 'poop'),
-                child: _overviewStat(context, 'Total poop', (state.excretory?.poopCount ?? 0).toString(), Icons.eco_outlined),
-              ),
-              GestureDetector(
-                onTap: () => _showSessionsDialog(context, state.sessions),
-                child: _overviewStat(context, 'Milk sessions', state.sessions.length.toString(), Icons.child_care),
-              ),
-              GestureDetector(
-                onTap: () => _showSessionsDialog(context, state.sessions),
-                child: _overviewStat(context, 'Milk time', _formatShort(totalFeastSeconds), Icons.av_timer),
-              ),
-              _overviewStat(context, 'Water today', '${waterState.water?.totalMl ?? 0}ml', Icons.water_drop),
-            ],
-          ),
-        ],
+    return Container(
+      padding:EdgeInsets.only(top: 20),
+      child: _SectionCard(
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            _sectionHeader(context, 'Today Overview'),
+            const SizedBox(height: 12),
+            Wrap(
+              spacing: 7,
+              runSpacing: 7,
+              children: [
+                GestureDetector(
+                  onTap: () => _showExcretoryLog(context, ref.read(todaySummaryControllerProvider.notifier), 'pee'),
+                  child: _overviewStat(context, 'Total pee', (state.excretory?.peeCount ?? 0).toString(), Icons.waves),
+                ),
+                GestureDetector(
+                  onTap: () => _showExcretoryLog(context, ref.read(todaySummaryControllerProvider.notifier), 'poop'),
+                  child: _overviewStat(context, 'Total poop', (state.excretory?.poopCount ?? 0).toString(), Icons.eco_outlined),
+                ),
+                GestureDetector(
+                  onTap: () => _showSessionsDialog(context, state.sessions),
+                  child: _overviewStat(context, 'Milk sessions', state.sessions.length.toString(), Icons.child_care),
+                ),
+                GestureDetector(
+                  onTap: () => _showSessionsDialog(context, state.sessions),
+                  child: _overviewStat(context, 'Milk time', _formatShort(totalFeastSeconds), Icons.av_timer),
+                ),
+                _overviewStat(context, 'Water today', '${waterState.water?.totalMl ?? 0}ml', Icons.water_drop),
+              ],
+            ),
+          ],
+        ),
       ),
     );
   }
