@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import 'presentation/screens/policy_screen.dart';
+import 'presentation/screens/setting_screen.dart';
 import 'presentation/screens/today_summary_screen.dart';
 import 'presentation/screens/water_screen.dart';
 import 'services/reminder_service.dart';
@@ -22,15 +23,17 @@ Future<void> main() async {
   );
 }
 
-class MyApp extends StatelessWidget {
+class MyApp extends ConsumerWidget {
   const MyApp({super.key});
 
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context, WidgetRef ref) {
+    final settings = ref.watch(settingControllerProvider);
+    final mode = settings.themeMode();
     return MaterialApp(
       debugShowCheckedModeBanner: false,
       title: 'MyBaby Summary',
-      themeMode: ThemeMode.system,
+      themeMode: mode,
       theme: ThemeData(
         colorScheme: ColorScheme(
           brightness: Brightness.light,
@@ -48,6 +51,14 @@ class MyApp extends StatelessWidget {
         scaffoldBackgroundColor: AppPalette.background,
         cardColor: AppPalette.card,
         dividerColor: AppPalette.border,
+        bottomNavigationBarTheme: BottomNavigationBarThemeData(
+          backgroundColor: AppPalette.card,
+          selectedItemColor: AppPalette.textPrimary,
+          unselectedItemColor: AppPalette.textSecondary,
+          selectedIconTheme: const IconThemeData(color: AppPalette.textPrimary),
+          unselectedIconTheme: const IconThemeData(color: AppPalette.textSecondary),
+          type: BottomNavigationBarType.fixed,
+        ),
         useMaterial3: true,
       ),
       darkTheme: ThemeData(
@@ -67,6 +78,14 @@ class MyApp extends StatelessWidget {
         scaffoldBackgroundColor: AppPalette.darkBackground,
         cardColor: AppPalette.darkSurface,
         dividerColor: AppPalette.darkBorder,
+        bottomNavigationBarTheme: const BottomNavigationBarThemeData(
+          backgroundColor: AppPalette.darkSurface,
+          selectedItemColor: Colors.white,
+          unselectedItemColor: Colors.white70,
+          selectedIconTheme: IconThemeData(color: Colors.white),
+          unselectedIconTheme: IconThemeData(color: Colors.white70),
+          type: BottomNavigationBarType.fixed,
+        ),
         useMaterial3: true,
       ),
       home: const HomeShell(),
@@ -90,6 +109,7 @@ class _HomeShellState extends ConsumerState<HomeShell> {
       TodaySummaryScreen(),
       WaterScreen(),
       PolicyScreen(),
+      SettingScreen(),
     ];
     return Scaffold(
       body: SafeArea(child: screens[_selectedIndex]),
@@ -100,6 +120,7 @@ class _HomeShellState extends ConsumerState<HomeShell> {
           BottomNavigationBarItem(icon: Icon(Icons.dashboard_outlined), label: 'Today'),
           BottomNavigationBarItem(icon: Icon(Icons.water_drop_outlined), label: 'Water'),
           BottomNavigationBarItem(icon: Icon(Icons.rule_folder_outlined), label: 'Policy'),
+          BottomNavigationBarItem(icon: Icon(Icons.settings_outlined), label: 'Settings'),
         ],
       ),
     );

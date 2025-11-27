@@ -5,10 +5,14 @@ import 'data/repositories/excretory_repository.dart';
 import 'data/repositories/feast_repository.dart';
 import 'data/repositories/policy_repository.dart';
 import 'data/repositories/reminder_repository.dart';
+import 'data/repositories/setting_repository.dart';
+import 'data/repositories/diaper_repository.dart';
 import 'data/repositories/water_repository.dart';
 import 'presentation/viewmodels/policy_controller.dart';
 import 'presentation/viewmodels/backup_controller.dart';
 import 'presentation/viewmodels/today_summary_controller.dart';
+import 'presentation/viewmodels/setting_controller.dart';
+import 'presentation/viewmodels/diaper_controller.dart';
 import 'presentation/viewmodels/water_controller.dart';
 import 'services/backup_service.dart';
 import 'services/reminder_service.dart';
@@ -49,6 +53,16 @@ final reminderRepositoryProvider = Provider<ReminderRepository>((ref) {
   return ReminderRepository(db);
 });
 
+final settingRepositoryProvider = Provider<SettingRepository>((ref) {
+  final db = ref.watch(appDatabaseProvider);
+  return SettingRepository(db);
+});
+
+final diaperRepositoryProvider = Provider<DiaperRepository>((ref) {
+  final db = ref.watch(appDatabaseProvider);
+  return DiaperRepository(db);
+});
+
 final reminderServiceProvider = Provider<ReminderService>((ref) => throw UnimplementedError('Override in main'));
 
 final todaySummaryControllerProvider = StateNotifierProvider<TodaySummaryController, TodaySummaryState>((ref) {
@@ -69,10 +83,26 @@ final waterControllerProvider = StateNotifierProvider<WaterController, WaterStat
   )..load();
 });
 
+final diaperControllerProvider = StateNotifierProvider<DiaperController, DiaperState>((ref) {
+  return DiaperController(
+    ref.watch(diaperRepositoryProvider),
+    ref.watch(policyRepositoryProvider),
+    ref.watch(reminderRepositoryProvider),
+    ref.watch(reminderServiceProvider),
+  )..load();
+});
+
 final policyControllerProvider = StateNotifierProvider<PolicyController, PolicyState>((ref) {
   return PolicyController(
     ref.watch(policyRepositoryProvider),
     onMilkPolicyChanged: () => ref.read(todaySummaryControllerProvider.notifier).refreshPolicy(),
     onWaterPolicyChanged: () => ref.read(waterControllerProvider.notifier).refreshPolicy(),
+    onDiaperPolicyChanged: () => ref.read(diaperControllerProvider.notifier).load(),
+  )..load();
+});
+
+final settingControllerProvider = StateNotifierProvider<SettingController, SettingState>((ref) {
+  return SettingController(
+    ref.watch(settingRepositoryProvider),
   )..load();
 });

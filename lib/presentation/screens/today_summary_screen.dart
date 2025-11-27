@@ -6,9 +6,12 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../providers.dart';
 import '../../domain/models/daily_feast.dart';
 import '../../domain/models/daily_feast_summary.dart';
+import '../viewmodels/diaper_controller.dart';
+import '../viewmodels/setting_controller.dart';
 import '../viewmodels/today_summary_controller.dart';
 import '../viewmodels/water_controller.dart';
 import 'backup_screen.dart';
+import 'setting_screen.dart';
 
 const _milkBottleAsset = 'assets/icons/bottle.png';
 const _peeAsset = 'assets/icons/pee.png';
@@ -22,6 +25,7 @@ class TodaySummaryScreen extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final state = ref.watch(todaySummaryControllerProvider);
+    final settings = ref.watch(settingControllerProvider);
     return SingleChildScrollView(
       padding: const EdgeInsets.all(16),
       child: Column(
@@ -39,6 +43,11 @@ class TodaySummaryScreen extends ConsumerWidget {
                     onPressed: () => Navigator.of(context).push(MaterialPageRoute(builder: (_) => const BackupScreen())),
                   ),
                   IconButton(
+                    icon: const Icon(Icons.settings_outlined),
+                    tooltip: 'Settings',
+                    onPressed: () => Navigator.of(context).push(MaterialPageRoute(builder: (_) => const SettingScreen())),
+                  ),
+                  IconButton(
                     icon: const Icon(Icons.alarm),
                     tooltip: 'View next reminder',
                     onPressed: () => _showReminderInfo(context, state),
@@ -51,7 +60,7 @@ class TodaySummaryScreen extends ConsumerWidget {
           if (state.loading)
             const Center(child: Padding(padding: EdgeInsets.all(24), child: CircularProgressIndicator()))
           else
-            _BabyPane(state: state),
+            _BabyPane(state: state, settings: settings),
           if (!state.loading) ...[
             _OverviewCard(state: state),
             const SizedBox(height: 16),
@@ -64,19 +73,23 @@ class TodaySummaryScreen extends ConsumerWidget {
 }
 
 class _BabyPane extends ConsumerWidget {
-  const _BabyPane({required this.state});
+  const _BabyPane({required this.state, required this.settings});
 
   final TodaySummaryState state;
+  final SettingState settings;
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final notifier = ref.read(todaySummaryControllerProvider.notifier);
+    final diaperState = ref.watch(diaperControllerProvider);
+    final diaperNotifier = ref.read(diaperControllerProvider.notifier);
     final isActive = state.activeFeeding;
     final nextTimeText = _formatTime(state.nextFeedAt?.toIso8601String());
     final countdownText = _formatCountdown(state.nextCountdown);
     final remindersEnabled = state.remindersEnabled;
     final totalFeastSeconds = (state.summary?.totalFeastTimeSec ?? 0) + (isActive ? state.elapsed.inSeconds : 0);
     final bottleCount = state.sessions.length;
+    final diaperEnabled = settings.isEnabled('diaper_changing');
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
@@ -240,34 +253,43 @@ class _BabyPane extends ConsumerWidget {
         ),
       ),
       const SizedBox(height: 14),
-        Text('Pee/Poop', style: Theme.of(context).textTheme.titleLarge?.copyWith(fontWeight: FontWeight.w700)),
-        const SizedBox(height: 8),
-        Row(
-          children: [
-            Expanded(
-              child: _ToiletTile(
-                label: 'Poop',
-                count: state.excretory?.poopCount ?? 0,
-                lastTime: state.excretory?.lastPoopTime,
-                imageAsset: _poopAsset,
-                onTap: notifier.incrementPoop,
-                onDecrement: notifier.decrementPoop,
-              ),
+      Text('Pee/Poop', style: Theme.of(context).textTheme.titleLarge?.copyWith(fontWeight: FontWeight.w700)),
+      const SizedBox(height: 8),
+      Row(
+        children: [
+          Expanded(
+            child: _ToiletTile(
+              label: 'Poop',
+              count: state.excretory?.poopCount ?? 0,
+              lastTime: state.excretory?.lastPoopTime,
+              imageAsset: _poopAsset,
+              onTap: notifier.incrementPoop,
+              onDecrement: notifier.decrementPoop,
             ),
-            const SizedBox(width: 12),
-            Expanded(
-              child: _ToiletTile(
-                label: 'Pee',
-                count: state.excretory?.peeCount ?? 0,
-                lastTime: state.excretory?.lastPeeTime,
-                imageAsset: _peeAsset,
-                onTap: notifier.incrementPee,
-                onDecrement: notifier.decrementPee,
-              ),
+          ),
+          const SizedBox(width: 12),
+          Expanded(
+            child: _ToiletTile(
+              label: 'Pee',
+              count: state.excretory?.peeCount ?? 0,
+              lastTime: state.excretory?.lastPeeTime,
+              imageAsset: _peeAsset,
+              onTap: notifier.incrementPee,
+              onDecrement: notifier.decrementPee,
             ),
-          ],
+          ),
+        ],
+      ),
+      if (diaperEnabled) ...[
+        const SizedBox(height: 16),
+        _DiaperCard(
+          state: diaperState,
+          onStart: diaperNotifier.start,
+          onStop: diaperNotifier.stop,
+          onFinish: diaperNotifier.finishChange,
         ),
       ],
+    ],
     );
   }
 
@@ -1026,6 +1048,100 @@ class _ToiletTile extends StatelessWidget {
             Text('Last time at ${_formatTime(lastTime)}'),
           ],
         ),
+      ),
+    );
+  }
+}
+
+class _DiaperCard extends StatelessWidget {
+  const _DiaperCard({
+    required this.state,
+    required this.onStart,
+    required this.onStop,
+    required this.onFinish,
+  });
+
+  final DiaperState state;
+  final VoidCallback onStart;
+  final VoidCallback onStop;
+  final VoidCallback onFinish;
+
+  @override
+  Widget build(BuildContext context) {
+    if (state.loading) {
+      return Container(
+        padding: const EdgeInsets.all(16),
+        decoration: BoxDecoration(
+          color: Theme.of(context).cardColor,
+          borderRadius: BorderRadius.circular(16),
+          border: Border.all(color: Theme.of(context).dividerColor),
+        ),
+        child: const Center(child: CircularProgressIndicator()),
+      );
+    }
+    final parsedNext = state.status?.nextChangeAt != null ? DateTime.tryParse(state.status!.nextChangeAt!) : null;
+    final nextTime = _formatTime(state.status?.nextChangeAt);
+    final countdown = parsedNext != null && state.countdown != null ? _formatCountdown(state.countdown) : '--:--:--';
+    final active = (state.status?.active ?? false) && parsedNext != null;
+    final lastChange = _formatTime(state.status?.changeAt);
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        color: Theme.of(context).cardColor,
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(color: Theme.of(context).dividerColor),
+        boxShadow: const [BoxShadow(color: Colors.black12, blurRadius: 6, offset: Offset(0, 3))],
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              const Icon(Icons.baby_changing_station, size: 32),
+              const SizedBox(width: 8),
+              Text('Diaper Changing', style: Theme.of(context).textTheme.titleMedium?.copyWith(fontWeight: FontWeight.w700)),
+            ],
+          ),
+          const SizedBox(height: 12),
+          Row(
+            children: [
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    const Text('Change Diaper in next', style: TextStyle(fontWeight: FontWeight.w600)),
+                    const SizedBox(height: 4),
+                    Text(countdown, style: Theme.of(context).textTheme.headlineSmall?.copyWith(fontWeight: FontWeight.bold)),
+                    const SizedBox(height: 6),
+                    Text('Change at $nextTime', style: const TextStyle(color: Colors.grey)),
+                    const SizedBox(height: 6),
+                    Text('Last changed at $lastChange', style: const TextStyle(color: Colors.grey)),
+                  ],
+                ),
+              ),
+              const SizedBox(width: 12),
+              Flexible(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: [
+                    ElevatedButton.icon(
+                      onPressed: active ? onFinish : onStart,
+                      icon: Icon(active ? Icons.check_circle : Icons.play_circle_fill),
+                      label: Text(active ? 'Change Diaper' : 'Start wearing'),
+                    ),
+                    const SizedBox(height: 6),
+                    if (active)
+                      TextButton(
+                        onPressed: onStop,
+                        child: const Text('Reset timer'),
+                      ),
+                  ],
+                ),
+              ),
+            ],
+          ),
+        ],
       ),
     );
   }

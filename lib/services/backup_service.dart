@@ -102,6 +102,8 @@ class BackupService {
         'daily_water',
         'water_log',
         'reminder_schedule',
+        'setting',
+        'diaper_status',
       ];
 
   ex.CellValue? _toCellValue(dynamic value) {

@@ -426,6 +426,7 @@ class TodaySummaryController extends StateNotifier<TodaySummaryState> {
         totalMilkSessions: 1,
         totalPee: 0,
         totalPooh: 0,
+        totalDiaper: existing?.totalDiaper ?? 0,
         alarmEnable: alarmEnabled,
         reminderAt: reminderIso,
         lastFeedingTime: end.toIso8601String(),
@@ -437,6 +438,7 @@ class TodaySummaryController extends StateNotifier<TodaySummaryState> {
     return existing.copyWith(
       totalFeastTimeSec: existing.totalFeastTimeSec + duration.inSeconds,
       totalMilkSessions: existing.totalMilkSessions + 1,
+      totalDiaper: existing.totalDiaper,
       alarmEnable: alarmEnabled,
       reminderAt: reminderIso ?? existing.reminderAt,
       lastFeedingTime: end.toIso8601String(),

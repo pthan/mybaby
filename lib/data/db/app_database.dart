@@ -4,7 +4,7 @@ import 'package:sqflite/sqflite.dart';
 /// Central SQLite entry point. Handles creation and migration.
 class AppDatabase {
   static const _dbName = 'mybaby.db';
-  static const _dbVersion = 5;
+  static const _dbVersion = 9;
 
   Database? _cachedDb;
 
@@ -37,6 +37,20 @@ class AppDatabase {
         if (oldVersion < 5) {
           await db.rawUpdate("UPDATE control_policy SET remind_hr = ? WHERE type = 'feast_milk';", [2.0]);
         }
+        if (oldVersion < 6) {
+          await _createSettingTable(db);
+          await _seedSettings(db);
+        }
+        if (oldVersion < 7) {
+          await _createDiaperStatusTable(db);
+          await _seedDiaperPolicy(db);
+        }
+        if (oldVersion < 8) {
+          await _addDiaperChangeAt(db);
+        }
+        if (oldVersion < 9) {
+          await db.execute('ALTER TABLE daily_feast_summary ADD COLUMN total_diaper INTEGER NOT NULL DEFAULT 0;');
+        }
       },
     );
     return _cachedDb!;
@@ -54,6 +68,7 @@ class AppDatabase {
         updated_at TEXT
       );
     ''');
+    await _createSettingTable(db);
     await db.execute('''
       CREATE TABLE daily_excretory (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -66,6 +81,7 @@ class AppDatabase {
         updated_at TEXT
       );
     ''');
+    await _createDiaperStatusTable(db);
     await db.execute('''
       CREATE TABLE excretory_log (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -92,6 +108,7 @@ class AppDatabase {
         total_milk_sessions INTEGER NOT NULL DEFAULT 0,
         total_pee INTEGER NOT NULL DEFAULT 0,
         total_pooh INTEGER NOT NULL DEFAULT 0,
+        total_diaper INTEGER NOT NULL DEFAULT 0,
         alarm_enable INTEGER NOT NULL DEFAULT 1,
         reminder_at TEXT,
         last_feeding_time TEXT,
@@ -144,5 +161,100 @@ class AppDatabase {
       'created_at': now,
       'updated_at': now,
     });
+    await _seedSettings(db);
+    await _seedDiaperPolicy(db);
+  }
+
+  Future<void> _createSettingTable(Database db) async {
+    await db.execute('''
+      CREATE TABLE IF NOT EXISTS setting (
+        settingid INTEGER PRIMARY KEY AUTOINCREMENT,
+        settingname TEXT NOT NULL UNIQUE,
+        display_name TEXT NOT NULL,
+        enable INTEGER NOT NULL DEFAULT 1,
+        created_at TEXT,
+        updated_at TEXT
+      );
+    ''');
+  }
+
+  Future<void> _createDiaperStatusTable(Database db) async {
+    await db.execute('''
+      CREATE TABLE IF NOT EXISTS diaper_status (
+        id INTEGER PRIMARY KEY CHECK (id = 1),
+        active_start_time TEXT,
+        next_change_at TEXT,
+        change_at TEXT,
+        active INTEGER NOT NULL DEFAULT 0,
+        created_at TEXT,
+        updated_at TEXT
+      );
+    ''');
+    final exists = Sqflite.firstIntValue(await db.rawQuery('SELECT COUNT(*) FROM diaper_status WHERE id = 1')) ?? 0;
+    if (exists == 0) {
+      final now = DateTime.now().toIso8601String();
+      await db.insert('diaper_status', {
+        'id': 1,
+        'active': 0,
+        'active_start_time': null,
+        'next_change_at': null,
+        'change_at': null,
+        'created_at': now,
+        'updated_at': now,
+      });
+    }
+  }
+
+  Future<void> _seedSettings(Database db) async {
+    final now = DateTime.now().toIso8601String();
+    final defaults = [
+      {'settingname': 'milk_feeding', 'display_name': 'Milk Feeding', 'enable': 1},
+      {'settingname': 'pee', 'display_name': 'Pee', 'enable': 1},
+      {'settingname': 'pooh', 'display_name': 'Pooh', 'enable': 1},
+      {'settingname': 'diaper_changing', 'display_name': 'Changing Diaper', 'enable': 1},
+      {'settingname': 'dark_mode', 'display_name': 'Change UI To dark mode', 'enable': 0},
+    ];
+    for (final row in defaults) {
+      await db.insert(
+        'setting',
+        {
+          ...row,
+          'created_at': now,
+          'updated_at': now,
+        },
+        conflictAlgorithm: ConflictAlgorithm.ignore,
+      );
+    }
+  }
+
+  Future<void> _seedDiaperPolicy(Database db) async {
+    final now = DateTime.now().toIso8601String();
+    final existing = Sqflite.firstIntValue(
+          await db.rawQuery("SELECT COUNT(*) FROM control_policy WHERE type = 'diaper_changing';"),
+        ) ??
+        0;
+    if (existing == 0) {
+      await db.insert('control_policy', {
+        'type': 'diaper_changing',
+        'value': 1.0,
+        'remind_hr': 5 / 60, // 5 minutes default
+        'value_category': 'hr',
+        'created_at': now,
+        'updated_at': now,
+      });
+    } else {
+      await db.rawUpdate(
+        "UPDATE control_policy SET remind_hr = ?, updated_at = ? WHERE type = 'diaper_changing';",
+        [5 / 60, now],
+      );
+    }
+  }
+
+  Future<void> _addDiaperChangeAt(Database db) async {
+    final columns = await db.rawQuery('PRAGMA table_info(diaper_status);');
+    final exists = columns.any((c) => c['name'] == 'change_at');
+    if (!exists) {
+      await db.execute('ALTER TABLE diaper_status ADD COLUMN change_at TEXT;');
+    }
   }
 }

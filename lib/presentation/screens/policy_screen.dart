@@ -78,6 +78,27 @@ class PolicyScreen extends ConsumerWidget {
                 ),
               ),
             ),
+            const SizedBox(height: 12),
+            Card(
+              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(18)),
+              child: Padding(
+                padding: const EdgeInsets.all(16),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    _sectionHeader('Diaper changing (control_policy.diaper_changing)'),
+                    const SizedBox(height: 12),
+                    Text('Reminder every ${_formatReminderLabel(state.diaperPolicy!.remindHr)}'),
+                    _DiaperReminderSlider(
+                      value: state.diaperPolicy!.remindHr,
+                      onChanged: notifier.updateDiaperReminder,
+                    ),
+                    const SizedBox(height: 4),
+                    const Text('Slider steps: 5-30 min, then 1-5 hours.'),
+                  ],
+                ),
+              ),
+            ),
           ],
         ],
       ),
@@ -161,5 +182,59 @@ class _ReminderPicker extends StatelessWidget {
 
   double _nearest(double raw) {
     return _options.reduce((a, b) => (raw - a).abs() <= (raw - b).abs() ? a : b);
+  }
+}
+
+class _DiaperReminderSlider extends StatelessWidget {
+  const _DiaperReminderSlider({required this.value, required this.onChanged});
+
+  final double value;
+  final ValueChanged<double> onChanged;
+
+  static const _stops = <double>[
+    5 / 60,
+    10 / 60,
+    20 / 60,
+    30 / 60,
+    1,
+    2,
+    3,
+    4,
+    5,
+  ];
+
+  @override
+  Widget build(BuildContext context) {
+    final nearest = _nearest(value);
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Slider(
+          value: nearest,
+          min: _stops.first,
+          max: _stops.last,
+          divisions: _stops.length - 1,
+          label: _formatReminderLabel(nearest),
+          onChanged: (v) => onChanged(_nearest(v)),
+        ),
+        Wrap(
+          spacing: 8,
+          runSpacing: 8,
+          children: _stops
+              .map(
+                (v) => ChoiceChip(
+                  label: Text(_formatReminderLabel(v)),
+                  selected: v == nearest,
+                  onSelected: (_) => onChanged(v),
+                ),
+              )
+              .toList(),
+        ),
+      ],
+    );
+  }
+
+  double _nearest(double raw) {
+    return _stops.reduce((a, b) => (raw - a).abs() <= (raw - b).abs() ? a : b);
   }
 }

@@ -6,6 +6,7 @@ class DailyFeastSummary {
     required this.totalMilkSessions,
     required this.totalPee,
     required this.totalPooh,
+    required this.totalDiaper,
     required this.alarmEnable,
     this.reminderAt,
     this.lastFeedingTime,
@@ -20,6 +21,7 @@ class DailyFeastSummary {
   final int totalMilkSessions;
   final int totalPee;
   final int totalPooh;
+  final int totalDiaper;
   final bool alarmEnable;
   final String? reminderAt;
   final String? lastFeedingTime;
@@ -32,6 +34,7 @@ class DailyFeastSummary {
     int? totalMilkSessions,
     int? totalPee,
     int? totalPooh,
+    int? totalDiaper,
     bool? alarmEnable,
     String? reminderAt,
     String? lastFeedingTime,
@@ -45,6 +48,7 @@ class DailyFeastSummary {
       totalMilkSessions: totalMilkSessions ?? this.totalMilkSessions,
       totalPee: totalPee ?? this.totalPee,
       totalPooh: totalPooh ?? this.totalPooh,
+      totalDiaper: totalDiaper ?? this.totalDiaper,
       alarmEnable: alarmEnable ?? this.alarmEnable,
       reminderAt: reminderAt ?? this.reminderAt,
       lastFeedingTime: lastFeedingTime ?? this.lastFeedingTime,
@@ -62,6 +66,7 @@ class DailyFeastSummary {
       totalMilkSessions: (map['total_milk_sessions'] as int?) ?? 0,
       totalPee: map['total_pee'] as int,
       totalPooh: map['total_pooh'] as int,
+      totalDiaper: (map['total_diaper'] as int?) ?? 0,
       alarmEnable: ((map['alarm_enable'] ?? 1) as int) == 1,
       reminderAt: map['reminder_at'] as String?,
       lastFeedingTime: map['last_feeding_time'] as String?,
@@ -79,6 +84,7 @@ class DailyFeastSummary {
       'total_milk_sessions': totalMilkSessions,
       'total_pee': totalPee,
       'total_pooh': totalPooh,
+      'total_diaper': totalDiaper,
       'alarm_enable': alarmEnable ? 1 : 0,
       'reminder_at': reminderAt,
       'last_feeding_time': lastFeedingTime,
