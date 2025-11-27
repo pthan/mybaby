@@ -234,7 +234,7 @@ class _BabyPane extends ConsumerWidget {
                   ),
                   const SizedBox(height: 14),
                   GestureDetector(
-                    onTap: () => _showSessionsDialog(context, state.sessions),
+                    onTap: () => _showSessionsDialog(context, notifier, state.sessions),
                     child: bottleCount == 0
                         ? const Text('No sessions yet', style: TextStyle(color: Colors.white70))
                         : Wrap(
@@ -401,11 +401,11 @@ class _OverviewCard extends ConsumerWidget {
                   child: _overviewStat(context, 'Total poop', (state.excretory?.poopCount ?? 0).toString(), Icons.eco_outlined),
                 ),
                 GestureDetector(
-                  onTap: () => _showSessionsDialog(context, state.sessions),
+                  onTap: () => _showSessionsDialog(context, ref.read(todaySummaryControllerProvider.notifier), state.sessions),
                   child: _overviewStat(context, 'Milk sessions', state.sessions.length.toString(), Icons.child_care),
                 ),
                 GestureDetector(
-                  onTap: () => _showSessionsDialog(context, state.sessions),
+                  onTap: () => _showSessionsDialog(context, ref.read(todaySummaryControllerProvider.notifier), state.sessions),
                   child: _overviewStat(context, 'Milk time', _formatShort(totalFeastSeconds), Icons.av_timer),
                 ),
                 _overviewStat(context, 'Water today', '${waterState.water?.totalMl ?? 0}ml', Icons.water_drop),
@@ -813,7 +813,7 @@ String _formatShort(int seconds) {
   return '${h}h ${m}m';
 }
 
-void _showSessionsDialog(BuildContext context, List<DailyFeast> sessions) {
+void _showSessionsDialog(BuildContext context, TodaySummaryController notifier, List<DailyFeast> sessions) {
   showDialog(
     context: context,
     builder: (ctx) {
@@ -828,23 +828,40 @@ void _showSessionsDialog(BuildContext context, List<DailyFeast> sessions) {
         title: const Text('Milk sessions'),
         content: SizedBox(
           width: double.maxFinite,
-          child: ListView.separated(
-            shrinkWrap: true,
-            itemCount: sessions.length,
-            separatorBuilder: (_, __) => const Divider(height: 1),
-            itemBuilder: (_, i) {
-              final s = sessions[i];
-              final start = DateTime.tryParse(s.startTime);
-              final end = DateTime.tryParse(s.endTime);
-              final duration = Duration(seconds: s.durationSec);
-              final timeLabel = start != null && end != null ? '${_formatTime(s.startTime)} - ${_formatTime(s.endTime)}' : '--';
-              return ListTile(
-                leading: Image.asset(_milkBottleAsset, height: 24, width: 24),
-                title: Text('${_formatShort(duration.inSeconds)}'),
-                subtitle: Text(timeLabel),
-              );
-            },
-          ),
+          child: Builder(builder: (_) {
+            final latestStart = sessions
+                .map((s) => DateTime.tryParse(s.startTime))
+                .whereType<DateTime>()
+                .fold<DateTime?>(null, (max, cur) => max == null || cur.isAfter(max) ? cur : max);
+            return ListView.separated(
+              shrinkWrap: true,
+              itemCount: sessions.length,
+              separatorBuilder: (_, __) => const Divider(height: 1),
+              itemBuilder: (_, i) {
+                final s = sessions[i];
+                final start = DateTime.tryParse(s.startTime);
+                final end = DateTime.tryParse(s.endTime);
+                final duration = Duration(seconds: s.durationSec);
+                final timeLabel =
+                    start != null && end != null ? '${_formatTime(s.startTime)} - ${_formatTime(s.endTime)}' : '--';
+                final isLatest = latestStart != null && (start?.isAtSameMomentAs(latestStart) ?? false);
+                return ListTile(
+                  leading: Image.asset(_milkBottleAsset, height: 24, width: 24),
+                  title: Text('${_formatShort(duration.inSeconds)}'),
+                  subtitle: Text(timeLabel),
+                  trailing: isLatest
+                      ? null
+                      : IconButton(
+                          icon: const Icon(Icons.delete, color: Colors.red),
+                          onPressed: () async {
+                            await notifier.removeMilkSession(s);
+                            Navigator.of(ctx).pop();
+                          },
+                        ),
+                );
+              },
+            );
+          }),
         ),
         actions: [TextButton(onPressed: () => Navigator.of(ctx).pop(), child: const Text('Close'))],
       );
@@ -908,6 +925,14 @@ Future<void> _showExcretoryLog(BuildContext context, TodaySummaryController noti
                       return ListTile(
                         leading: Icon(type == 'pee' ? Icons.water_drop : Icons.catching_pokemon_outlined),
                         title: Text(_formatTimeFull(time) ?? '--'),
+                        trailing: IconButton(
+                          icon: const Icon(Icons.delete ,color: Colors.red,),
+                          onPressed: () async {
+                            await notifier.removeExcretoryEntry(time, type);
+                            final updated = await notifier.fetchExcretoryLog(type);
+                            setState(() => entries = updated);
+                          },
+                        ),
                       );
                     },
                   ),

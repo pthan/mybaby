@@ -101,6 +101,27 @@ class FeastRepository {
     return fetchSummaryToday();
   }
 
+  Future<DailyFeastSummary> removeSession(int id, int durationSec) async {
+    final key = todayKey();
+    final db = await _db.database;
+    final nowIso = DateTime.now().toIso8601String();
+    await db.transaction((txn) async {
+      await txn.delete('daily_feast', where: 'id = ? AND date = ?', whereArgs: [id, key]);
+      await _ensureSummary(txn, key);
+      await txn.rawUpdate(
+        '''
+        UPDATE daily_feast_summary SET 
+          total_feast_time_sec = CASE WHEN total_feast_time_sec - ? < 0 THEN 0 ELSE total_feast_time_sec - ? END,
+          total_milk_sessions = CASE WHEN total_milk_sessions > 0 THEN total_milk_sessions - 1 ELSE 0 END,
+          updated_at = ?
+        WHERE date = ?
+        ''',
+        [durationSec, durationSec, nowIso, key],
+      );
+    });
+    return fetchSummaryToday();
+  }
+
   Future<List<DailyFeastSummary>> fetchRecentSummaries({int days = 7}) async {
     final db = await _db.database;
     final rows = await db.query(
