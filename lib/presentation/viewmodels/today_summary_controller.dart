@@ -22,6 +22,7 @@ class TodaySummaryState {
     required this.sessions,
     required this.milkPolicy,
     required this.activeFeeding,
+    required this.feedingPaused,
     required this.activeStart,
     required this.elapsed,
     required this.nextFeedAt,
@@ -38,6 +39,7 @@ class TodaySummaryState {
   final List<DailyFeast> sessions;
   final ControlPolicy? milkPolicy;
   final bool activeFeeding;
+  final bool feedingPaused;
   final DateTime? activeStart;
   final Duration elapsed;
   final DateTime? nextFeedAt;
@@ -52,6 +54,7 @@ class TodaySummaryState {
     Object? sessions = _unset,
     Object? milkPolicy = _unset,
     Object? activeFeeding = _unset,
+    Object? feedingPaused = _unset,
     Object? activeStart = _unset,
     Object? elapsed = _unset,
     Object? nextFeedAt = _unset,
@@ -66,6 +69,7 @@ class TodaySummaryState {
       sessions: identical(sessions, _unset) ? this.sessions : sessions as List<DailyFeast>,
       milkPolicy: identical(milkPolicy, _unset) ? this.milkPolicy : milkPolicy as ControlPolicy?,
       activeFeeding: identical(activeFeeding, _unset) ? this.activeFeeding : activeFeeding as bool,
+      feedingPaused: identical(feedingPaused, _unset) ? this.feedingPaused : feedingPaused as bool,
       activeStart: identical(activeStart, _unset) ? this.activeStart : activeStart as DateTime?,
       elapsed: identical(elapsed, _unset) ? this.elapsed : elapsed as Duration,
       nextFeedAt: identical(nextFeedAt, _unset) ? this.nextFeedAt : nextFeedAt as DateTime?,
@@ -83,6 +87,7 @@ class TodaySummaryState {
         sessions: const [],
         milkPolicy: null,
         activeFeeding: false,
+        feedingPaused: false,
         activeStart: null,
         elapsed: Duration.zero,
         nextFeedAt: null,
@@ -109,6 +114,21 @@ class TodaySummaryController extends StateNotifier<TodaySummaryState> {
 
   Timer? _ticker;
   Timer? _countdownTicker;
+  Duration _elapsedBeforePause = Duration.zero;
+
+  Duration _currentElapsed(DateTime now) {
+    if (!state.activeFeeding || state.activeStart == null) return state.elapsed;
+    return _elapsedBeforePause + now.difference(state.activeStart!);
+  }
+
+  void _startElapsedTicker() {
+    _ticker?.cancel();
+    if (!state.activeFeeding || state.activeStart == null || state.feedingPaused) return;
+    _ticker = Timer.periodic(const Duration(seconds: 1), (_) {
+      final now = DateTime.now();
+      state = state.copyWith(elapsed: _currentElapsed(now));
+    });
+  }
 
   Future<void> load() async {
     final excretory = await _excretoryRepository.fetchToday();
@@ -206,11 +226,13 @@ class TodaySummaryController extends StateNotifier<TodaySummaryState> {
     final start = DateTime.now();
     state = state.copyWith(
       activeFeeding: true,
+      feedingPaused: false,
       activeStart: start,
       elapsed: Duration.zero,
       nextFeedAt: null,
       nextCountdown: null,
     );
+    _elapsedBeforePause = Duration.zero;
     // Even if reminders or wakelock fail, keep the UI responsive.
     try {
       await _reminderService.cancelMilkReminder();
@@ -218,16 +240,34 @@ class TodaySummaryController extends StateNotifier<TodaySummaryState> {
     try {
       await WakelockPlus.enable();
     } catch (_) {}
-    _ticker = Timer.periodic(const Duration(seconds: 1), (_) {
-      state = state.copyWith(elapsed: DateTime.now().difference(start));
-    });
+    _startElapsedTicker();
+  }
+
+  Future<void> pauseFeeding() async {
+    if (!state.activeFeeding || state.feedingPaused) return;
+    final now = DateTime.now();
+    _ticker?.cancel();
+    _elapsedBeforePause = _currentElapsed(now);
+    state = state.copyWith(feedingPaused: true, elapsed: _elapsedBeforePause);
+    try {
+      await WakelockPlus.disable();
+    } catch (_) {}
+  }
+
+  Future<void> resumeFeeding() async {
+    if (!state.activeFeeding || !state.feedingPaused) return;
+    state = state.copyWith(feedingPaused: false, activeStart: DateTime.now());
+    try {
+      await WakelockPlus.enable();
+    } catch (_) {}
+    _startElapsedTicker();
   }
 
   Future<void> endFeeding() async {
     if (!state.activeFeeding || state.activeStart == null) return;
     final start = state.activeStart!;
     final end = DateTime.now();
-    final duration = end.difference(start);
+    final duration = _currentElapsed(end);
     final baseNextReminder = _nextFromPolicy(end, state.milkPolicy);
     var remindersEnabled = state.remindersEnabled;
     _ticker?.cancel();
@@ -251,6 +291,7 @@ class TodaySummaryController extends StateNotifier<TodaySummaryState> {
     ];
     state = state.copyWith(
       activeFeeding: false,
+      feedingPaused: false,
       activeStart: null,
       elapsed: Duration.zero,
       summary: optimisticSummary,
@@ -305,10 +346,12 @@ class TodaySummaryController extends StateNotifier<TodaySummaryState> {
     state = state.copyWith(
       summary: updatedSummary,
       sessions: sessions,
+      feedingPaused: false,
       remindersEnabled: remindersEnabled,
       nextFeedAt: ensuredNext,
       nextCountdown: remindersEnabled ? _computeCountdown(ensuredNext) : null,
     );
+    _elapsedBeforePause = Duration.zero;
     await _refreshRecentSummaries();
     _restartCountdownTimer();
   }

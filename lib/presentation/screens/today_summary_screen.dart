@@ -83,9 +83,20 @@ class _BabyPane extends ConsumerWidget {
     final notifier = ref.read(todaySummaryControllerProvider.notifier);
     final diaperState = ref.watch(diaperControllerProvider);
     final diaperNotifier = ref.read(diaperControllerProvider.notifier);
+    final theme = Theme.of(context);
+    final borderColor =
+        theme.brightness == Brightness.dark ? theme.colorScheme.secondary : theme.colorScheme.primary;
+    final buttonFg = theme.brightness == Brightness.dark ? Colors.white : borderColor;
+    final buttonBg = theme.brightness == Brightness.dark
+        ? Colors.white.withOpacity(0.08)
+        : borderColor.withOpacity(0.12);
     final isActive = state.activeFeeding;
-    final nextTimeText = _formatTime(state.nextFeedAt?.toIso8601String());
-    final countdownText = _formatCountdown(state.nextCountdown);
+    final isPaused = state.feedingPaused;
+    final nextTarget = state.activeFeeding ? null : (state.nextFeedAt ?? _deriveNextTarget(state));
+    final nextTimeText = _formatTime(nextTarget?.toIso8601String());
+    final countdownText = _formatCountdown(
+      (!state.activeFeeding && state.remindersEnabled) ? (state.nextCountdown ?? _deriveCountdown(nextTarget)) : null,
+    );
     final remindersEnabled = state.remindersEnabled;
     final totalFeastSeconds = (state.summary?.totalFeastTimeSec ?? 0) + (isActive ? state.elapsed.inSeconds : 0);
     final bottleCount = state.sessions.length;
@@ -148,8 +159,10 @@ class _BabyPane extends ConsumerWidget {
                           AnimatedSwitcher(
                             duration: const Duration(milliseconds: 150),
                             child: Text(
-                              isActive ? 'Feeding in progress' : 'Ready to log a feed',
-                              key: ValueKey<String>('status-$isActive'),
+                              isActive
+                                  ? (isPaused ? 'Feeding paused' : 'Feeding in progress')
+                                  : 'Ready to log a feed',
+                              key: ValueKey<String>('status-$isActive-$isPaused'),
                               style: const TextStyle(color: Colors.white70, fontWeight: FontWeight.w600),
                             ),
                           ),
@@ -223,13 +236,31 @@ class _BabyPane extends ConsumerWidget {
                     ],
                   ),
                   const SizedBox(height: 10),
-                  Row(
+                  Wrap(
+                    spacing: 8,
+                    runSpacing: 6,
+                    crossAxisAlignment: WrapCrossAlignment.center,
                     children: [
                       const Text('Timer: ', style: TextStyle(color: Colors.white70, fontSize: 16)),
                       Text(
                         _formatClock(state.activeFeeding ? state.elapsed : Duration.zero),
                         style: const TextStyle(color: Colors.white, fontWeight: FontWeight.w700, fontSize: 18),
                       ),
+                      if (isActive)
+                        TextButton.icon(
+                          style: TextButton.styleFrom(
+                            foregroundColor: buttonFg,
+                            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+                            minimumSize: Size.zero,
+                            tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                            side: BorderSide(color: borderColor, width: 1.5),
+                            backgroundColor: buttonBg,
+                            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                          ),
+                          icon: Icon(isPaused ? Icons.play_arrow : Icons.pause),
+                          label: Text(isPaused ? 'Resume Feeding' : 'Pause Feeding'),
+                          onPressed: () => isPaused ? notifier.resumeFeeding() : notifier.pauseFeeding(),
+                        ),
                     ],
                   ),
                   const SizedBox(height: 14),
@@ -805,12 +836,33 @@ String _formatCountdown(Duration? duration) {
   return '$h:$m:$s';
 }
 
+Duration? _deriveCountdown(DateTime? target) {
+  if (target == null) return null;
+  final diff = target.difference(DateTime.now());
+  if (diff.isNegative) return null;
+  return Duration(seconds: diff.inSeconds);
+}
+
 String _formatShort(int seconds) {
   final duration = Duration(seconds: seconds);
   final h = duration.inHours;
   final m = duration.inMinutes % 60;
   if (h == 0) return '${m}m';
   return '${h}h ${m}m';
+}
+
+DateTime? _deriveNextTarget(TodaySummaryState state) {
+  if (state.activeFeeding) return null;
+  if (state.nextFeedAt != null) return state.nextFeedAt;
+  final reminder = state.summary?.reminderAt != null ? DateTime.tryParse(state.summary!.reminderAt!) : null;
+  final lastRaw = state.summary?.lastFeedingTime ?? state.summary?.lastFeastEndTime;
+  final last = lastRaw != null ? DateTime.tryParse(lastRaw) : null;
+  if (reminder != null && reminder.isAfter(DateTime.now())) return reminder;
+  if (last != null && state.milkPolicy != null) {
+    final minutes = (state.milkPolicy!.remindHr * 60).round();
+    return last.add(Duration(minutes: minutes));
+  }
+  return reminder;
 }
 
 void _showSessionsDialog(BuildContext context, TodaySummaryController notifier, List<DailyFeast> sessions) {
